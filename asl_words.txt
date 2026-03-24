@@ -1,0 +1,25 @@
+Hi
+welcome
+to 
+our 
+project
+a
+sign language interpreter
+that
+interprets
+American Sign Language
+into
+text
+and
+speech
+it
+uses
+computer vision
+and
+machine learning
+to
+detect
+hand 
+gestures
+and 
+converts them into text and speech
