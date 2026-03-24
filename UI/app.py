@@ -391,18 +391,18 @@ class ASLGradioApp:
                 elem_id="stats-bar",
             )
 
-            # ── Hidden webcam (streams in background, zero layout space) ──
-            webcam = gr.Image(
-                sources=["webcam"],
-                type="numpy",
-                streaming=True,
-                visible="hidden",
-            )
-
             # ── Main two-column layout ──
             with gr.Row():
-                # Left — hero video feed
+                # Left — webcam + processed feed
                 with gr.Column(scale=3):
+                    webcam = gr.Image(
+                        sources=["webcam"],
+                        type="numpy",
+                        streaming=True,
+                        label="Camera",
+                        elem_id="webcam-input",
+                        height=80,
+                    )
                     output_img = gr.Image(
                         type="numpy",
                         label="Live Feed",

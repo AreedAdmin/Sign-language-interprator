@@ -11,6 +11,14 @@
    Gradio 6 uses CSS variables for theming, not .gr-* classes.
    ============================================================ */
 
+/* ── Page body — eliminate light strips ────────────────────── */
+
+body,
+.main,
+.app {
+    background: #0f0f23 !important;
+}
+
 /* ── Global: dark theme via CSS variables ──────────────────── */
 
 .gradio-container,
@@ -72,6 +80,15 @@
     border: 1px solid rgba(0, 212, 170, 0.2) !important;
     box-shadow: 0 0 20px rgba(0, 212, 170, 0.06) !important;
     overflow: hidden !important;
+}
+
+/* ── Webcam input — small, unobtrusive ────────────────────── */
+
+#webcam-input {
+    opacity: 0.85;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin-bottom: 8px !important;
 }
 
 /* ── Speak button glow ────────────────────────────────────── */
