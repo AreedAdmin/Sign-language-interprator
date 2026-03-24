@@ -1,1 +1,68 @@
+# ─────────────────────────────────────────────────────────────
+# .gitignore  —  ASL Real-time Interpreter
+# ─────────────────────────────────────────────────────────────
+
+# ── Environment & secrets  (NEVER push .env) ─────────────────
 .env
+.env.local
+.env.*.local
+secrets.json
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# ── Virtual environments ──────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# ── Pytest / coverage ────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── Jupyter ───────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Trained model weights (can be large) ─────────────────────
+data/models/*.h5
+data/models/*.pb
+data/models/*.tflite
+data/models/*.onnx
+data/models/*.pt
+data/models/*.pth
+# Keep the directory itself
+!data/models/.gitkeep
+
+# ── OS junk ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDEs ─────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.sublime-workspace
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Gradio temp files ─────────────────────────────────────────
+gradio_cached_examples/
+flagged/
