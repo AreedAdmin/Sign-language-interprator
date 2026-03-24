@@ -1,6 +1,6 @@
 """
 main.py — Person 4 (Integration)
-Wires ASLClassifier → Gradio UI + TTSEngine into one app.
+Wires ASLClassifier → Gradio UI + macOS TTS into one app.
 
 MediaPipe 0.10.14+ removed mp.solutions, so HandDetector (which used the
 legacy API) is bypassed here. The GestureRecognizer inside ASLClassifier
@@ -20,11 +20,32 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import cv2
 import numpy as np
+import subprocess
+import threading
+from collections import deque, Counter
 
 from models.asl_classifier import ASLClassifier
+from models.asl_sign_mapper import ASLSignMapper
 from ui.app import ASLGradioApp, _CSS
-from ui.tts_engine import TTSEngine
 from utils.preprocessing import landmarks_to_bounding_box, draw_bounding_box
+
+
+_say_process = None
+_say_lock = threading.Lock()
+
+
+def _speak_async(text: str) -> None:
+    """Speak text via macOS 'say', killing any in-flight speech first."""
+    global _say_process
+    with _say_lock:
+        if _say_process and _say_process.poll() is None:
+            _say_process.terminate()
+        _say_process = subprocess.Popen(
+            ["say", text],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    _say_process.wait()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -67,11 +88,53 @@ def draw_hand_skeleton(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Gesture stabilizer — voting buffer that locks in a gesture label only when
+# a majority of recent frames agree, preventing per-frame jitter.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class GestureStabilizer:
+    """
+    Temporal voting buffer.  Only changes the displayed gesture when
+    `threshold` out of the last `window` frames agree on the same label.
+    """
+
+    def __init__(self, window: int = 8, threshold: int = 5):
+        self._buffer: deque = deque(maxlen=window)
+        self._threshold = threshold
+        self._stable_name = None
+        self._stable_conf = 0.0
+        self._stable_top3: list = []
+
+    def update(self, name, confidence, top_3):
+        self._buffer.append(name)
+        if not self._buffer:
+            return self._stable_name, self._stable_conf, self._stable_top3
+
+        most_common, count = Counter(self._buffer).most_common(1)[0]
+        if count >= self._threshold:
+            self._stable_name = most_common
+            self._stable_conf = confidence
+            self._stable_top3 = list(top_3)
+
+        return self._stable_name, self._stable_conf, self._stable_top3
+
+    def reset(self):
+        self._buffer.clear()
+        self._stable_name = None
+        self._stable_conf = 0.0
+        self._stable_top3 = []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Initialise components
 # ─────────────────────────────────────────────────────────────────────────────
 
 classifier = ASLClassifier()   # loads asl_words.txt + gesture model
-tts        = TTSEngine(rate=150, volume=0.9)
+sign_mapper = ASLSignMapper()  # rule-based ASL sign recognition
+stabilizer = GestureStabilizer(window=8, threshold=5)
+
+# Track the last gesture spoken so we only speak once per new gesture
+_last_spoken_gesture = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,13 +172,62 @@ def pipeline(frame):
         label = f"{conf_pct}%" if conf_pct > 0 else ""
         draw_bounding_box(annotated, bbox, label=label, color=(0, 212, 170))
 
-    # 3. Speak the word the moment it fires (non-blocking)
-    if prediction["sign"] is not None:
-        tts.speak(prediction["sign"])
+    # 3. Map to real ASL meaning using landmark rules + MediaPipe fallback
+    raw_top3 = prediction.get("top_3", [])
+    mp_gesture = raw_top3[0][0] if raw_top3 else None
+    mp_conf = raw_top3[0][1] if raw_top3 else 0.0
+
+    asl_sign = sign_mapper.classify(
+        landmarks,
+        mediapipe_gesture=mp_gesture,
+        mediapipe_confidence=mp_conf,
+    )
+
+    if asl_sign:
+        raw_name = asl_sign
+        raw_conf = mp_conf if mp_conf > 0 else 0.85
+        display_top3 = [(asl_sign, raw_conf)] + [
+            (t[0], t[1]) for t in raw_top3[1:3]
+        ] if raw_top3 else [(asl_sign, raw_conf), ("—", 0), ("—", 0)]
+    elif landmarks is not None:
+        raw_name = "Detecting..."
+        raw_conf = 0.0
+        display_top3 = []
+    else:
+        raw_name = None
+        raw_conf = 0.0
+        display_top3 = []
+
+    # 4. Stabilize — only change when majority of recent frames agree
+    stable_name, stable_conf, stable_top3 = stabilizer.update(
+        raw_name, raw_conf, display_top3,
+    )
+
+    # Merge stabilized gesture info back into prediction
+    stable_prediction = dict(prediction)
+    stable_prediction["stable_gesture"] = stable_name
+    stable_prediction["stable_confidence"] = stable_conf
+    stable_prediction["stable_top3"] = stable_top3
+
+    # 4. Auto-speak the gesture name when a NEW stable gesture is detected.
+    #    Kills any in-flight speech and starts the new one immediately.
+    global _last_spoken_gesture
+    if (
+        stable_name is not None
+        and stable_name != "Detecting..."
+        and stable_name != _last_spoken_gesture
+    ):
+        spoken = stable_name.replace("_", " ")
+        _last_spoken_gesture = stable_name
+        threading.Thread(
+            target=_speak_async, args=(spoken,), daemon=True,
+        ).start()
+    elif stable_name is None:
+        _last_spoken_gesture = None
 
     return {
         "frame":               annotated,
-        "prediction":          prediction,
+        "prediction":          stable_prediction,
         "landmarks_detected":  landmarks is not None,
     }
 
@@ -128,7 +240,7 @@ if __name__ == "__main__":
     app = ASLGradioApp(use_mock=False)
     app.set_pipeline(pipeline)
     app.set_reset_fn(classifier.reset)
-    app.tts_engine = tts          # share the same TTS instance
+    app.tts_engine = None         # TTS handled via macOS 'say' in pipeline()
 
     demo = app.create_interface()
     demo.launch(

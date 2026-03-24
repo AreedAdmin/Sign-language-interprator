@@ -22,7 +22,10 @@ import time
 try:
     from .tts_engine import TTSEngine          # package import (src/ui)
 except ImportError:
-    from tts_engine import TTSEngine           # direct run fallback
+    try:
+        from tts_engine import TTSEngine       # direct run fallback
+    except ImportError:
+        TTSEngine = None
 
 # Load CSS from file
 _CSS_PATH = os.path.join(os.path.dirname(__file__), "styles.css")
@@ -212,7 +215,7 @@ class ASLGradioApp:
         self._pipeline = None
         self._reset_fn = None
 
-        self.tts_engine = TTSEngine(rate=150, volume=0.9)
+        self.tts_engine = None
 
         # Session state
         self._last_sign_time = 0.0
@@ -332,34 +335,39 @@ class ASLGradioApp:
         prediction = result.get("prediction")
 
         # ── Detection panel ──────────────────────────────────────────────────
-        # Show gesture info whenever a hand is visible (confidence > 0),
-        # not only when a sign fires. This keeps the panel alive between
-        # script advances so the user sees real-time gesture feedback.
+        # Uses stabilized gesture from the voting buffer in main.py so the
+        # panel only changes when a gesture is held steadily for several frames.
         has_hand = (
             prediction
             and prediction.get("landmarks") is not None
         )
-        confidence = prediction.get("confidence", 0) if prediction else 0
-        top_3 = prediction.get("top_3", []) if prediction else []
 
-        if has_hand and (confidence > 0 or top_3):
-            # If a sign just fired, show the script word; otherwise show
-            # the top gesture name from MediaPipe so the user still sees
-            # live feedback during cooldown.
-            sign_label = prediction.get("sign")
-            if sign_label is None and top_3:
-                sign_label = top_3[0][0]
-                confidence = top_3[0][1]
-            elif sign_label is None:
-                sign_label = "Detecting..."
+        # Prefer the stabilized gesture (majority-voted across frames)
+        stable_name = prediction.get("stable_gesture") if prediction else None
+        stable_conf = prediction.get("stable_confidence", 0) if prediction else 0
+        stable_top3 = prediction.get("stable_top3", []) if prediction else []
 
-            if not top_3:
-                top_3 = [(sign_label, confidence), ("—", 0), ("—", 0)]
+        # If a sign just fired from the script, show that instead
+        sign_label = prediction.get("sign") if prediction else None
 
-            conf_bucket = round(confidence * 20) / 20
-            det_key = (sign_label, conf_bucket)
+        if sign_label:
+            display_name = sign_label
+            display_conf = prediction.get("confidence", stable_conf)
+            display_top3 = stable_top3 or [(display_name, display_conf), ("—", 0), ("—", 0)]
+        elif has_hand and stable_name:
+            display_name = stable_name
+            display_conf = stable_conf
+            display_top3 = stable_top3 or [(display_name, display_conf), ("—", 0), ("—", 0)]
+        else:
+            display_name = None
+            display_conf = 0
+            display_top3 = []
+
+        if display_name:
+            conf_bucket = round(display_conf * 20) / 20
+            det_key = (display_name, conf_bucket)
             if det_key != self._last_det_key:
-                det_html = _detection_html(sign_label, confidence, top_3)
+                det_html = _detection_html(display_name, display_conf, display_top3)
                 self._last_det_key = det_key
             else:
                 det_html = gr.update()
@@ -439,7 +447,19 @@ class ASLGradioApp:
 
     def _speak_sentence(self):
         if self._refined_sentence:
-            self.tts_engine.speak(self._refined_sentence)
+            if self.tts_engine is not None:
+                self.tts_engine.speak(self._refined_sentence)
+            else:
+                import subprocess, threading
+                threading.Thread(
+                    target=lambda t: subprocess.run(
+                        ["say", t],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    ),
+                    args=(self._refined_sentence,),
+                    daemon=True,
+                ).start()
             return f"""
             <div style="text-align:center; padding:8px; color:#00d4aa; font-size:0.9rem;">
                 🔊 Speaking: &ldquo;{self._refined_sentence}&rdquo;
