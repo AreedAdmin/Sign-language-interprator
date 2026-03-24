@@ -1,5 +1,0 @@
-gradio>=4.0.0
-numpy
-opencv-python-headless
-pyttsx3
-Pillow

@@ -19,7 +19,10 @@ import argparse
 import gradio as gr
 import time
 
-from tts_engine import TTSEngine
+try:
+    from .tts_engine import TTSEngine          # package import (src/ui)
+except ImportError:
+    from tts_engine import TTSEngine           # direct run fallback
 
 # Load CSS from file
 _CSS_PATH = os.path.join(os.path.dirname(__file__), "styles.css")
@@ -268,7 +271,10 @@ class ASLGradioApp:
             )
 
     def _process_mock(self, frame):
-        from mock_backend import mock_detect_hand, mock_classify_sign, mock_claude_refine
+        try:
+            from .mock_backend import mock_detect_hand, mock_classify_sign, mock_claude_refine
+        except ImportError:
+            from mock_backend import mock_detect_hand, mock_classify_sign, mock_claude_refine
 
         detection = mock_detect_hand(frame)
         annotated = detection["annotated_frame"]
