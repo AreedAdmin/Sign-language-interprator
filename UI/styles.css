@@ -1,0 +1,154 @@
+/* ============================================================
+   ASL Real-Time Interpreter — Dark Theme for Gradio 6.9.0
+
+   Colour palette:
+     Background   #0f0f23  (deep navy)
+     Cards        #1a1a2e
+     Primary      #00d4aa  (teal)
+     Secondary    #7c5cfc  (purple)
+     Text         #e8e8e8
+
+   Gradio 6 uses CSS variables for theming, not .gr-* classes.
+   ============================================================ */
+
+/* ── Global: dark theme via CSS variables ──────────────────── */
+
+.gradio-container,
+.gradio-container-6-9-0 {
+    --body-background-fill: #0f0f23 !important;
+    --body-text-color: #e8e8e8 !important;
+
+    --block-background-fill: #1a1a2e !important;
+    --block-border-color: rgba(255, 255, 255, 0.06) !important;
+    --block-border-width: 1px !important;
+    --block-radius: 10px !important;
+    --block-label-text-color: #aaa !important;
+    --block-label-background-fill: #1a1a2e !important;
+    --block-title-text-color: #e8e8e8 !important;
+
+    --panel-background-fill: #1a1a2e !important;
+    --panel-border-color: rgba(255, 255, 255, 0.06) !important;
+
+    --input-background-fill: #16213e !important;
+    --input-background-fill-hover: #1a2744 !important;
+    --input-background-fill-focus: #1e2d50 !important;
+    --input-border-color: rgba(255, 255, 255, 0.08) !important;
+    --input-placeholder-color: #555 !important;
+
+    --button-primary-background-fill: #00d4aa !important;
+    --button-primary-background-fill-hover: #00e4b8 !important;
+    --button-primary-text-color: #0f0f23 !important;
+    --button-primary-border-color: transparent !important;
+
+    --button-cancel-background-fill: transparent !important;
+    --button-cancel-background-fill-hover: rgba(255, 107, 107, 0.1) !important;
+    --button-cancel-text-color: #ff6b6b !important;
+    --button-cancel-border-color: rgba(255, 107, 107, 0.5) !important;
+
+    --button-secondary-background-fill: #1a1a2e !important;
+    --button-secondary-text-color: #e8e8e8 !important;
+    --button-secondary-border-color: rgba(255, 255, 255, 0.1) !important;
+
+    --color-accent: #00d4aa !important;
+    --color-accent-soft: rgba(0, 212, 170, 0.15) !important;
+
+    --shadow-drop: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+    --shadow-drop-lg: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+
+    --checkbox-background-color: #16213e !important;
+    --checkbox-border-color: rgba(255, 255, 255, 0.1) !important;
+    --checkbox-label-background-fill: #1a1a2e !important;
+    --checkbox-label-text-color: #e8e8e8 !important;
+
+    background: #0f0f23 !important;
+    color: #e8e8e8 !important;
+    max-width: 1200px !important;
+}
+
+/* ── Hero video feed ──────────────────────────────────────── */
+
+#hero-video {
+    border-radius: 12px !important;
+    border: 1px solid rgba(0, 212, 170, 0.2) !important;
+    box-shadow: 0 0 20px rgba(0, 212, 170, 0.06) !important;
+    overflow: hidden !important;
+}
+
+/* ── Speak button glow ────────────────────────────────────── */
+
+#speak-btn {
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+    transition: box-shadow 0.2s ease, transform 0.1s ease !important;
+}
+
+#speak-btn:hover {
+    box-shadow: 0 0 18px rgba(0, 212, 170, 0.35) !important;
+    transform: translateY(-1px) !important;
+}
+
+/* ── Clear button ─────────────────────────────────────────── */
+
+#clear-btn {
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    transition: background 0.2s ease !important;
+}
+
+/* ── Labels ───────────────────────────────────────────────── */
+
+.gradio-container label,
+.gradio-container .label-wrap span {
+    color: #aaa !important;
+}
+
+/* ── Accordion / details (if used) ────────────────────────── */
+
+.gradio-container details,
+.gradio-container details > summary {
+    background: #1a1a2e !important;
+    color: #e8e8e8 !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Scrollbar (subtle) ───────────────────────────────────── */
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0f0f23;
+}
+::-webkit-scrollbar-thumb {
+    background: #7c5cfc44;
+    border-radius: 3px;
+}
+
+/* ── Live indicator pulse ─────────────────────────────────── */
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #00d4aa;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: livePulse 1.8s ease-in-out infinite;
+    vertical-align: middle;
+    box-shadow: 0 0 6px #00d4aa55;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+
+.footer-bar {
+    text-align: center;
+    padding: 20px 0 10px;
+    color: #444;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
