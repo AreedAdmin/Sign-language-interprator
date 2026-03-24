@@ -62,15 +62,16 @@ flowchart TD
 
 ### 2. ASL Classification Model
 
-- **Model Architecture**: CNN-LSTM or Transformer-based model for sequence classification
-- **Training Data**: ASL dataset (ASL-LEX, MS-ASL, or custom dataset)
-- **Output**: Confidence scores for common ASL words/phrases (100-500 vocabulary)
+- **Mode**: Script/Sequence Mode — advances through `asl_words.txt` in order each time a confident sign is detected
+- **Vocabulary**: Exact 25 phrases from `asl_words.txt` (the demo script)
+- **Output**: Next phrase in the script sequence + confidence score
+- **No free-form recognition needed** — signer rehearses 25 signs mapped to the script
 
 ### 3. Text-to-Speech Integration
 
-- **Whispr Model**: Integration for natural voice synthesis
-- **Audio Pipeline**: Real-time audio generation and playback
-- **Voice Customization**: Configurable voice parameters
+- **Engine**: `pyttsx3` for local synthesis, or pre-generate all 25 audio clips offline for better quality
+- **Audio Pipeline**: Output the phrase from `asl_words.txt` when each sign is confirmed
+- **Pre-recorded option**: Since demo is a video recording, TTS audio can be generated once and synced in post
 
 ### 4. Gradio Web Interface
 
@@ -180,32 +181,32 @@ sign-language-interpreter/
 
 ## Performance Considerations
 
-### Real-time Requirements
+### Pre-recorded Demo — No Real-time Constraints
 
-- **Target Latency**: <200ms end-to-end processing
-- **Frame Rate**: 30 FPS video processing
-- **Model Optimization**: TensorRT/ONNX optimization for inference speed
+- **No latency target**: Demo is recorded video, not live. Correctness > speed.
+- **No FPS requirement**: Record at any comfortable frame rate; edit in post if needed.
+- **Multiple takes**: Re-record until the sequence is clean and reliable.
 
 ### Accuracy Improvements
 
-- **Temporal Smoothing**: Multi-frame averaging for stable predictions
-- **Confidence Thresholding**: Filter low-confidence predictions
-- **Context Awareness**: Use previous predictions to improve accuracy
+- **Script mode reliability**: Classifier only needs to detect "sign performed" reliably, not identify which sign
+- **Confidence Thresholding**: Filter low-confidence detections to avoid premature script advancement
+- **Hold duration**: Signer holds each sign for ~1–2 seconds so the system has time to confirm
 
 ## Deployment and Testing
 
 ### Local Development
 
 - Gradio development server with hot reload
-- Webcam testing with various lighting conditions
-- Performance profiling and optimization
+- Webcam testing to confirm script advances correctly through all 25 phrases
+- Rehearsal runs with the signer to nail timing
 
 ### Testing Strategy
 
 - Unit tests for each component
-- Integration tests for full pipeline
-- User acceptance testing with ASL users
-- Performance benchmarking
+- Integration tests for full pipeline (all 25 script phrases output in order)
+- Full run-through recording test — confirm start-to-finish is clean
+- Re-record if any phrase is skipped or misfired
 
 ## 2-Hour Hackathon Team Delegation Strategy
 
@@ -440,18 +441,18 @@ gantt
 
 #### Core Features (Must Have)
 
-1. **Hand Detection**: MediaPipe hand tracking
-2. **Basic ASL Recognition**: 10-15 common signs (A-Z letters + "Hello", "Thank you", "Yes", "No")
-3. **Text Display**: Show detected signs in real-time
-4. **Simple TTS**: Basic voice output using `pyttsx3`
-5. **Gradio Interface**: Video input/output with text display
+1. **Hand Detection**: MediaPipe hand tracking with confident sign detection
+2. **Script-Mode Classifier**: Advances through all 25 phrases in `asl_words.txt` sequentially
+3. **Text Display**: Show current phrase prominently on screen as each sign is detected
+4. **TTS**: Speak each phrase aloud when detected (pyttsx3 or pre-generated audio clips)
+5. **Gradio Interface**: Video input/output with clear text display
 
 #### Nice-to-Have (If Time Permits)
 
-1. Confidence scores display
-2. Sign history/log
-3. Audio controls (volume, voice selection)
-4. Better visual feedback
+1. Progress indicator (e.g. "Phrase 7 of 25")
+2. Full script transcript panel that highlights current phrase
+3. "Reset to start" button for re-recording takes
+4. Better visual feedback / hand tracking overlay
 
 ### Communication Strategy
 
@@ -471,11 +472,11 @@ gantt
 
 ### Success Metrics
 
-- ✅ Live video feed with hand detection
-- ✅ At least 10 signs correctly recognized
-- ✅ Text-to-speech working for detected signs
-- ✅ Smooth, demo-ready user interface
-- ✅ End-to-end pipeline processing in <1 second
+- ✅ Live video feed with hand detection overlay
+- ✅ All 25 phrases from `asl_words.txt` output in correct order
+- ✅ Text-to-speech speaks each phrase clearly
+- ✅ Clean, professional UI visible in the recording
+- ✅ Full scripted sequence completes without skips or errors in a single take
 
 ## 2-Hour Feasibility Assessment
 
@@ -483,10 +484,12 @@ gantt
 
 #### **Simplified Scope for 2 Hours:**
 
-1. **Reduced Vocabulary**: 7-10 basic signs instead of 100+ (A-Z letters + "HELLO", "THANK_YOU", "YES", "NO")
-2. **Pre-built Components**: Use MediaPipe (ready-to-use) + simple rule-based classifier
-3. **Basic TTS**: `pyttsx3` is lightweight and fast to implement
-4. **Gradio**: Provides instant web UI with minimal code
+1. **Fixed Script**: Exactly 25 phrases from `asl_words.txt` — no open-ended recognition
+2. **Script-Mode Classifier**: Detects a confident sign → advances script index — zero ML training needed
+3. **Pre-built Components**: MediaPipe (ready-to-use) + sequence-advance classifier
+4. **Basic TTS**: `pyttsx3` is lightweight and fast to implement
+5. **Gradio**: Provides instant web UI with minimal code
+6. **Pre-recorded video**: No live demo pressure — re-record until the take is perfect
 
 #### **Risk Mitigation Strategies:**
 
@@ -499,35 +502,37 @@ gantt
 
 | Challenge                 | Solution                                                       |
 | ------------------------- | -------------------------------------------------------------- |
-| **ML Model Complexity**   | Use rule-based classifier: if hand is in position X → sign "A" |
-| **Real-time Performance** | Process every 3rd frame instead of every frame                 |
-| **Integration Issues**    | Person 4 creates mock interfaces early for testing             |
-| **Audio Latency**         | Use simple `pyttsx3.say()` - no complex audio processing       |
+| **Sign recognition**      | Script mode — detect hand present + hold, advance script index |
+| **Multi-word phrases**    | Each phrase is a single script entry, triggered by one sign    |
+| **Wrong timing/skipping** | Re-record the take — no live demo pressure                     |
+| **TTS quality**           | Pre-generate all 25 audio clips offline for cleaner sound      |
+| **Integration issues**    | Person 4 creates mock interfaces early for testing             |
 
 
 ### **What the Final Demo Will Look Like:**
 
 ```
-🖥️ Browser Window (localhost:7860)
-┌─────────────────────────────────────────────────┐
-│ 📹 Live Video Feed          📊 Detection Panel  │
-│ [Webcam showing hands]      Current: "HELLO"    │
-│ [Hand tracking overlay]     Confidence: 87%     │
-│                             History: A, B, HI   │
-│ 🔊 Audio Controls           📝 Status           │
-│ [🔇] Mute  [🔊] Volume      "Detecting..."      │
-└─────────────────────────────────────────────────┘
+🖥️ Browser Window (localhost:7860)  — captured as screen recording
+┌─────────────────────────────────────────────────────────────┐
+│ 📹 Live Video Feed            📊 Script Output Panel        │
+│ [Webcam showing signer]       Current: "sign language       │
+│ [Hand tracking overlay]        interpreter"                 │
+│                               Phrase: 7 of 25               │
+│                               Confidence: 91%               │
+│ 🔊 Audio plays each phrase    📝 Full transcript shown      │
+│ automatically on detection    with current phrase highlighted│
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**User Experience:**
+**Recording Flow:**
 
-1. User opens browser to `localhost:7860`
+1. Signer opens browser to `localhost:7860`, screen recording starts
 2. Webcam activates, shows live video feed
-3. User makes ASL sign (e.g., "A" or "HELLO")
-4. Green dots appear on hand landmarks
-5. Text appears: "Detected: HELLO (87% confidence)"
-6. Computer voice says "HELLO"
-7. Sign appears in history panel
+3. Signer performs sign #1 → system outputs "Hi", TTS speaks it
+4. Signer performs sign #2 → system outputs "welcome", TTS speaks it
+5. ... continues through all 25 phrases in `asl_words.txt`
+6. Final phrase: "converts them into text and speech" is spoken
+7. Screen recording saved as demo video
 
 ### **Exact File Structure You'll Create:**
 

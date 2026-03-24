@@ -33,13 +33,15 @@ Build a real-time ASL interpreter that:
 3. **Person 3**: UI Developer (Gradio interface)
 4. **Person 4**: Integration Specialist (project setup + testing)
 
+### Demo Format
+Pre-recorded video. The signer performs a scripted 25-sign sequence. The system outputs each phrase from `asl_words.txt` in order. No live demo pressure — re-record until the take is clean.
+
 ### Success Criteria
-- ✅ Live video feed with hand detection overlay
-- ✅ Recognition of 7-10 basic ASL signs
-- ✅ Real-time text display of detected signs
-- ✅ Text-to-speech audio output
-- ✅ Working Gradio web interface
-- ✅ End-to-end processing under 1 second
+- ✅ Live video feed with hand detection overlay (visible in recording)
+- ✅ All 25 phrases from `asl_words.txt` output in correct sequence
+- ✅ Text-to-speech speaks each phrase clearly
+- ✅ Working Gradio web interface shown in recording
+- ✅ Reset button allows restarting the script for a new take
 
 ## Getting Started
 
@@ -58,7 +60,7 @@ Camera Input → Hand Detection → ASL Classification → Text Display → Text
 
 ## Technology Stack
 - **Computer Vision**: MediaPipe Hands
-- **Machine Learning**: Pre-trained ASL model or rule-based classifier
+- **Classifier**: Script/Sequence Mode — advances through `asl_words.txt` in order on each confirmed sign (no ML training required)
 - **Frontend**: Gradio web interface
-- **Text-to-Speech**: pyttsx3
+- **Text-to-Speech**: pyttsx3 (or pre-generated audio clips for better quality)
 - **Language**: Python 3.8+

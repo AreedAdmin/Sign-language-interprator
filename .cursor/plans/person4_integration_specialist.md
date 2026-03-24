@@ -637,20 +637,52 @@ class MockHandDetector:
         pass
 
 class MockASLClassifier:
-    """Mock ASL classifier for testing."""
-    
+    """Mock script-mode ASL classifier for testing."""
+
+    SCRIPT = [
+        "Hi", "welcome", "to", "our", "project", "a",
+        "sign language interpreter", "that", "interprets",
+        "American Sign Language", "into", "text", "and", "speech",
+        "it", "uses", "computer vision", "and", "machine learning",
+        "to", "detect", "hand", "gestures", "and",
+        "converts them into text and speech"
+    ]
+
     def __init__(self):
-        self.signs = ['A', 'B', 'C', 'HELLO', 'YES', 'NO']
-    
+        self.index = 0
+        self._frame_count = 0
+
     def add_frame(self, landmarks):
-        pass
-    
+        if landmarks:
+            self._frame_count += 1
+
     def predict(self):
-        import random
+        advanced = False
+        if self._frame_count >= 20 and self.index < len(self.SCRIPT):
+            phrase = self.SCRIPT[self.index]
+            self.index += 1
+            self._frame_count = 0
+            advanced = True
+            return {
+                'sign': phrase,
+                'confidence': 1.0,
+                'script_index': self.index,
+                'total': len(self.SCRIPT),
+                'advanced': True,
+                'completed': self.index >= len(self.SCRIPT),
+            }
         return {
-            'sign': random.choice(self.signs),
-            'confidence': random.uniform(0.6, 0.95)
+            'sign': self.SCRIPT[self.index] if self.index < len(self.SCRIPT) else None,
+            'confidence': self._frame_count / 20,
+            'script_index': self.index,
+            'total': len(self.SCRIPT),
+            'advanced': False,
+            'completed': self.index >= len(self.SCRIPT),
         }
+
+    def reset(self):
+        self.index = 0
+        self._frame_count = 0
 
 class MockTTSEngine:
     """Mock TTS engine for testing."""
@@ -679,16 +711,17 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 def run_demo_preparation():
     """Prepare for demo by testing all components."""
     
-    print("🎬 Demo Preparation Checklist")
+    print("🎬 Pre-Recording Readiness Checklist")
     print("=" * 40)
-    
+
     checklist = {
         "Camera Access": False,
         "Hand Detection": False,
-        "ASL Classification": False,
+        "Script-Mode Classifier (25 phrases)": False,
         "Text-to-Speech": False,
         "Gradio Interface": False,
-        "End-to-End Pipeline": False
+        "End-to-End Pipeline": False,
+        "Full Script Run-through": False,
     }
     
     try:
@@ -811,10 +844,10 @@ gradio_interface = gr.Interface(...)
 ## Success Criteria
 
 - ✅ All components integrate smoothly
-- ✅ End-to-end pipeline processes frames in <1 second
-- ✅ Demo runs without crashes
+- ✅ All 25 phrases from `asl_words.txt` output in order during a test run
+- ✅ `reset()` restarts the script cleanly (for bad recording takes)
+- ✅ No crashes during a full 25-phrase run
 - ✅ All team members can contribute simultaneously
-- ✅ Backup plans ready for component failures
 - ✅ Clear error messages and logging
 
 ## Tips for Success

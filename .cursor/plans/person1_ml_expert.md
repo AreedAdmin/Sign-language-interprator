@@ -26,151 +26,146 @@ def classify_sign(landmarks):
     pass
 ```
 
-#### Task 2: Create ASL Classifier (15-35 min)
+#### Task 2: Create ASL Classifier in Script Mode (15-35 min)
 Create `src/models/asl_classifier.py`:
+
+**Key design**: The classifier does NOT need to identify *which* sign is made. It only needs to detect that *a confident sign was held* and then advance the script index to output the next phrase from `asl_words.txt`.
 
 ```python
 import numpy as np
-from typing import List, Dict, Tuple
+from pathlib import Path
+from typing import List, Dict, Tuple, Optional
+
+# The exact demo script — order matters
+SCRIPT_PHRASES = [
+    "Hi", "welcome", "to", "our", "project", "a",
+    "sign language interpreter", "that", "interprets",
+    "American Sign Language", "into", "text", "and", "speech",
+    "it", "uses", "computer vision", "and", "machine learning",
+    "to", "detect", "hand", "gestures", "and",
+    "converts them into text and speech"
+]
 
 class ASLClassifier:
-    def __init__(self):
-        """Initialize the ASL classifier with basic signs."""
-        self.signs = {
-            0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E',
-            5: 'HELLO', 6: 'THANK_YOU', 7: 'YES', 8: 'NO', 9: 'PLEASE'
-        }
-        self.model = self._load_model()
-        self.frame_buffer = []
-        self.buffer_size = 5
-    
-    def _load_model(self):
-        """Load or create the classification model."""
-        # TODO: Implement model loading
-        # For now, return None and use rule-based classification
-        return None
-    
-    def add_frame(self, landmarks: List[Tuple[float, float, float]]) -> None:
-        """Add a frame of landmarks to the buffer."""
-        if len(landmarks) == 21:  # MediaPipe hands gives 21 landmarks
-            normalized = self._normalize_landmarks(landmarks)
-            self.frame_buffer.append(normalized)
-            
-            if len(self.frame_buffer) > self.buffer_size:
-                self.frame_buffer.pop(0)
-    
-    def _normalize_landmarks(self, landmarks: List[Tuple[float, float, float]]) -> List[float]:
-        """Normalize landmarks relative to wrist position."""
-        if not landmarks:
-            return [0.0] * 63  # 21 points * 3 coordinates
-        
-        # Use wrist (landmark 0) as reference point
-        wrist = landmarks[0]
-        normalized = []
-        
-        for point in landmarks:
-            normalized.extend([
-                point[0] - wrist[0],  # x relative to wrist
-                point[1] - wrist[1],  # y relative to wrist
-                point[2] - wrist[2]   # z relative to wrist
-            ])
-        
-        return normalized
-    
-    def predict(self) -> Dict[str, any]:
-        """Predict the current sign based on frame buffer."""
-        if len(self.frame_buffer) < 3:
-            return {'sign': None, 'confidence': 0.0}
-        
-        if self.model is None:
-            # Use rule-based classification
-            return self._rule_based_prediction()
-        else:
-            # Use ML model
-            return self._ml_prediction()
-    
-    def _rule_based_prediction(self) -> Dict[str, any]:
-        """Simple rule-based sign recognition."""
-        if not self.frame_buffer:
-            return {'sign': None, 'confidence': 0.0}
-        
-        latest_frame = self.frame_buffer[-1]
-        
-        # Simple rules based on hand shape
-        # These are very basic - you can improve them
-        
-        # Check if hand is in fist position (A)
-        if self._is_fist(latest_frame):
-            return {'sign': 'A', 'confidence': 0.8}
-        
-        # Check if hand is open (HELLO or 5)
-        elif self._is_open_hand(latest_frame):
-            return {'sign': 'HELLO', 'confidence': 0.7}
-        
-        # Check if thumb up (YES)
-        elif self._is_thumbs_up(latest_frame):
-            return {'sign': 'YES', 'confidence': 0.75}
-        
-        # Default
-        return {'sign': 'UNKNOWN', 'confidence': 0.3}
-    
-    def _is_fist(self, landmarks: List[float]) -> bool:
-        """Check if hand is in fist position."""
-        # Simple check: fingers are close to palm
-        # This is a placeholder - implement based on landmark positions
-        return False
-    
-    def _is_open_hand(self, landmarks: List[float]) -> bool:
-        """Check if hand is open."""
-        # Simple check: fingers are extended
-        # This is a placeholder - implement based on landmark positions
-        return True
-    
-    def _is_thumbs_up(self, landmarks: List[float]) -> bool:
-        """Check if thumb is up."""
-        # Simple check: thumb is extended upward
-        # This is a placeholder - implement based on landmark positions
-        return False
-    
-    def _ml_prediction(self) -> Dict[str, any]:
-        """Use ML model for prediction."""
-        # TODO: Implement ML model prediction
-        # Convert frame_buffer to model input format
-        # Run inference
-        # Return prediction with confidence
-        pass
+    """
+    Script-mode classifier: advances through SCRIPT_PHRASES in order
+    each time a confident hand sign is detected and held.
+    """
 
-# Test function
+    def __init__(self, hold_frames: int = 15, confidence_threshold: float = 0.6):
+        """
+        Args:
+            hold_frames: Number of consecutive frames a hand must be present
+                         before the script advances (prevents accidental triggers).
+            confidence_threshold: Minimum MediaPipe confidence to count a frame.
+        """
+        self.script = SCRIPT_PHRASES
+        self.script_index = 0
+        self.hold_frames = hold_frames
+        self.confidence_threshold = confidence_threshold
+        self.consecutive_frames = 0
+        self.last_phrase: Optional[str] = None
+        self.completed = False
+
+    def reset(self) -> None:
+        """Reset to the beginning of the script (for re-recording a take)."""
+        self.script_index = 0
+        self.consecutive_frames = 0
+        self.last_phrase = None
+        self.completed = False
+
+    def add_frame(self, landmarks: List[Tuple[float, float, float]]) -> None:
+        """
+        Feed a frame's landmarks into the classifier.
+
+        Args:
+            landmarks: 21 (x, y, z) tuples from MediaPipe, or empty list if
+                       no hand was detected.
+        """
+        if landmarks and len(landmarks) == 21:
+            self.consecutive_frames += 1
+        else:
+            # Hand not present — reset hold counter but don't go back in script
+            self.consecutive_frames = 0
+
+    def predict(self) -> Dict[str, object]:
+        """
+        Return the current prediction.
+
+        Returns a dict with:
+            'sign'        — the current phrase from the script (or None)
+            'confidence'  — 1.0 when sign is confirmed, 0.0 otherwise
+            'script_index'— current position in script (0-based)
+            'total'       — total phrases in script
+            'advanced'    — True if the script just advanced this call
+            'completed'   — True if all phrases have been output
+        """
+        advanced = False
+
+        if (
+            not self.completed
+            and self.consecutive_frames >= self.hold_frames
+        ):
+            # Sign held long enough — advance script
+            self.last_phrase = self.script[self.script_index]
+            self.script_index += 1
+            self.consecutive_frames = 0
+            advanced = True
+
+            if self.script_index >= len(self.script):
+                self.completed = True
+
+        return {
+            'sign': self.last_phrase,
+            'confidence': 1.0 if advanced else (
+                self.consecutive_frames / self.hold_frames
+            ),
+            'script_index': self.script_index,
+            'total': len(self.script),
+            'advanced': advanced,
+            'completed': self.completed,
+        }
+
+
 def test_classifier():
-    """Test the classifier with dummy data."""
-    classifier = ASLClassifier()
-    
-    # Dummy landmarks (21 points with x, y, z coordinates)
-    dummy_landmarks = [(0.5, 0.5, 0.0) for _ in range(21)]
-    
-    classifier.add_frame(dummy_landmarks)
-    result = classifier.predict()
-    
-    print(f"Test prediction: {result}")
-    return result
+    """Test the script-mode classifier with dummy frames."""
+    classifier = ASLClassifier(hold_frames=5)
+
+    # Simulate holding a sign for 5 frames, then releasing, for first 3 phrases
+    for phrase_num in range(3):
+        print(f"\n--- Signing phrase {phrase_num + 1} ---")
+        for frame in range(6):
+            dummy_landmarks = [(0.5, 0.5, 0.0)] * 21
+            classifier.add_frame(dummy_landmarks)
+            result = classifier.predict()
+            if result['advanced']:
+                print(f"Advanced! Output: '{result['sign']}'")
+
+        # Brief pause between signs (no hand)
+        for _ in range(3):
+            classifier.add_frame([])
+            classifier.predict()
+
+    print(f"\nFinal script index: {classifier.script_index}/{len(SCRIPT_PHRASES)}")
 
 if __name__ == "__main__":
     test_classifier()
 ```
 
-#### Task 3: Implement Basic Sign Recognition (35-50 min)
-Focus on these 7-10 signs:
-- **Letters**: A, B, C, D, E
-- **Words**: HELLO, THANK_YOU, YES, NO, PLEASE
+#### Task 3: Tune Hold Sensitivity (35-50 min)
+Work with the signer to calibrate `hold_frames`:
+- Too low → script advances accidentally (signer moves between signs)
+- Too high → signer has to hold each sign awkwardly long
+- Recommended starting point: `hold_frames=20` (~0.7s at 30 FPS)
+- Test by running through all 25 phrases and timing the feel
 
-Implement the rule-based methods:
-- `_is_fist()` - for letter "A"
-- `_is_open_hand()` - for "HELLO" 
-- `_is_thumbs_up()` - for "YES"
-- Add 2-3 more simple gestures
+Also add a small gap requirement after each advance — the hand must be absent for at least 5 frames before the next sign can register.
 
-#### Task 4: Test with Dummy Data (50-60 min)
-Create test cases and verify your classifier works with mock landmark data.
+#### Task 4: Test Full Script End-to-End (50-60 min)
+Run through all 25 phrases using dummy data in `test_classifier()` and confirm:
+- All phrases output in the correct order
+- No phrase skipped
+- Script stops at the end without crashing
 
 ### Hour 2: Integration & TTS (50 minutes)
 
@@ -195,7 +190,11 @@ def process_frame(frame):
 ```
 
 #### Task 6: Add Text-to-Speech (90-110 min)
-Create `src/models/tts_engine.py`:
+Create `src/models/tts_engine.py`.
+
+Since the demo is pre-recorded, you have two options — use whichever fits your time:
+- **Option A (fast)**: Live `pyttsx3` synthesis — speaks each phrase as it's detected
+- **Option B (better quality)**: Pre-generate all 25 audio clips as `.mp3` files offline using a higher-quality TTS service (Google TTS, ElevenLabs, etc.) and play them back on trigger
 
 ```python
 import pyttsx3
@@ -280,38 +279,40 @@ landmarks = [
 ```python
 # Expected output to gradio_app.py
 prediction = {
-    'sign': 'HELLO',
-    'confidence': 0.87,
-    'alternatives': [('HELLO', 0.87), ('HI', 0.10), ('WAVE', 0.03)]
+    'sign': 'sign language interpreter',  # Current phrase from script
+    'confidence': 1.0,                    # 1.0 on advance, 0-1 while holding
+    'script_index': 7,                    # How far through the script (0-based)
+    'total': 25,                          # Total phrases
+    'advanced': True,                     # True only on the frame it advanced
+    'completed': False,                   # True after last phrase
 }
 ```
 
 ## Testing Strategy
 
-1. **Unit Tests**: Test each method with known inputs
-2. **Mock Data**: Use dummy landmarks to test classification
-3. **Integration Tests**: Test with Person 2's hand detector
-4. **Performance Tests**: Ensure predictions are fast (<100ms)
+1. **Unit Tests**: Run `test_classifier()` to verify all 25 phrases output in order
+2. **Hold Calibration**: Test `hold_frames` value with real signer to get comfortable timing
+3. **Integration Tests**: Test with Person 2's hand detector — verify script advances on real signs
+4. **Full Run-through**: Complete all 25 phrases end-to-end without errors before recording
 
 ## Backup Plans
 
-1. **If ML model fails**: Use rule-based classification
-2. **If rules are complex**: Start with just 3-4 basic signs
-3. **If TTS fails**: Use simple print statements for demo
+1. **If hold detection is unreliable**: Add a keyboard spacebar trigger as fallback to manually advance the script during recording
+2. **If TTS quality is poor**: Pre-generate audio clips using Google TTS or ElevenLabs offline
+3. **No ML training failure risk**: Script mode has no model to train — it always works
 
 ## Success Criteria
 
-- ✅ ASL classifier processes hand landmarks
-- ✅ Recognizes at least 7 basic signs
-- ✅ Returns predictions with confidence scores
-- ✅ TTS speaks detected signs clearly
-- ✅ Integration works smoothly with other components
-- ✅ Processing time under 100ms per prediction
+- ✅ All 25 phrases from `asl_words.txt` output in correct sequence
+- ✅ Script advances reliably when signer holds a sign
+- ✅ Script does NOT advance accidentally between signs
+- ✅ TTS speaks each phrase clearly
+- ✅ `reset()` method works so bad takes can be restarted instantly
 
 ## Tips for Success
 
-1. **Start Simple**: Begin with 3-4 obvious signs (A, HELLO, YES)
-2. **Test Early**: Verify each component works independently
-3. **Use Placeholders**: Mock complex parts initially
-4. **Focus on Integration**: Spend time ensuring smooth data flow
-5. **Have Backups**: Prepare fallback solutions for each component
+1. **Script mode is foolproof**: Don't overthink recognition — just detect hand presence + hold
+2. **Calibrate `hold_frames` early**: Get the signer to test it before the recording session
+3. **Add a gap requirement**: Require hand to disappear briefly between signs to avoid double-triggers
+4. **Pre-generate audio if time allows**: Much better quality for the recording than live pyttsx3
+5. **Test the full 25-phrase sequence twice** before the recording session

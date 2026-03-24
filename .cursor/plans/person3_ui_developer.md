@@ -322,24 +322,37 @@ class ASLGradioApp:
 def test_gradio_app():
     """Test the ASL Gradio application."""
     
-    # Create mock processing pipeline
+    # Create mock processing pipeline simulating script-mode advancement
+    script = [
+        "Hi", "welcome", "to", "our", "project", "a",
+        "sign language interpreter", "that", "interprets",
+        "American Sign Language", "into", "text", "and", "speech",
+        "it", "uses", "computer vision", "and", "machine learning",
+        "to", "detect", "hand", "gestures", "and",
+        "converts them into text and speech"
+    ]
+    mock_index = [0]  # mutable for closure
+
     def mock_pipeline(frame):
-        """Mock processing pipeline for testing."""
+        """Mock pipeline: advances through script on every 30th call."""
         import random
-        
-        # Simulate random sign detection
-        signs = ['A', 'B', 'C', 'HELLO', 'THANK_YOU', 'YES', 'NO']
-        
-        if random.random() > 0.7:  # 30% chance of detection
+        mock_pipeline.call_count = getattr(mock_pipeline, 'call_count', 0) + 1
+
+        if mock_pipeline.call_count % 30 == 0 and mock_index[0] < len(script):
+            phrase = script[mock_index[0]]
+            mock_index[0] += 1
             return {
                 'frame': frame,
                 'prediction': {
-                    'sign': random.choice(signs),
-                    'confidence': random.uniform(0.6, 0.95)
+                    'sign': phrase,
+                    'confidence': 1.0,
+                    'script_index': mock_index[0],
+                    'total': len(script),
+                    'advanced': True,
+                    'completed': mock_index[0] >= len(script),
                 }
             }
-        else:
-            return {'frame': frame, 'prediction': None}
+        return {'frame': frame, 'prediction': None}
     
     # Create and test app
     app = ASLGradioApp()
@@ -484,9 +497,15 @@ class ASLGradioApp:
     def __init__(self):
         # ... existing init ...
         
-        # Demo features
-        self.demo_mode = False
-        self.demo_signs = ['A', 'B', 'C', 'HELLO', 'THANK_YOU', 'YES', 'NO']
+        # Script phrases for display reference
+        self.script_phrases = [
+            "Hi", "welcome", "to", "our", "project", "a",
+            "sign language interpreter", "that", "interprets",
+            "American Sign Language", "into", "text", "and", "speech",
+            "it", "uses", "computer vision", "and", "machine learning",
+            "to", "detect", "hand", "gestures", "and",
+            "converts them into text and speech"
+        ]
         
     def enable_demo_mode(self):
         """Enable demo mode with helpful hints."""
@@ -507,24 +526,21 @@ class ASLGradioApp:
             """)
             
             # Demo instructions
-            with gr.Accordion("📋 Demo Instructions", open=True):
+            with gr.Accordion("📋 Demo Script", open=True):
                 gr.Markdown("""
-                ### How to Use:
-                1. **Allow camera access** when prompted
-                2. **Position your hand** in front of the camera
-                3. **Make ASL signs** - try these: A, B, C, HELLO, YES, NO
-                4. **Watch the detection** appear in real-time
-                5. **Listen** to the audio output (ensure volume is on)
-                
-                ### Supported Signs:
-                - **Letters**: A, B, C, D, E
-                - **Words**: HELLO, THANK_YOU, YES, NO, PLEASE
-                
-                ### Tips for Best Results:
-                - Ensure good lighting
-                - Keep hand clearly visible
-                - Hold signs steady for 1-2 seconds
-                - Try different angles if not detecting
+                ### Scripted Presentation Sequence:
+                The signer performs 25 signs in order. Each sign advances the script.
+
+                > *"Hi, welcome to our project — a sign language interpreter that
+                > interprets American Sign Language into text and speech. It uses
+                > computer vision and machine learning to detect hand gestures and
+                > converts them into text and speech."*
+
+                ### Tips for Recording:
+                - Hold each sign steady for ~1 second until you hear/see it trigger
+                - Lower your hand briefly between each sign
+                - Use the Reset button to restart if a take goes wrong
+                - Good lighting + clear hand visibility = reliable detection
                 """)
             
             # Main interface (same as before but with demo styling)
@@ -569,18 +585,17 @@ tts_engine = object          # Text-to-speech engine object
 
 ## Success Criteria
 
-- ✅ Gradio interface loads and displays video feed
-- ✅ Real-time updates of detection results
-- ✅ Audio controls work properly
-- ✅ Clean, professional appearance for demo
-- ✅ Smooth integration with backend pipeline
-- ✅ Responsive design that works well for presentation
+- ✅ Gradio interface loads and displays video feed with hand tracking overlay
+- ✅ Current phrase from the script displays prominently when a sign is detected
+- ✅ Script progress indicator shows (e.g. "Phrase 7 of 25")
+- ✅ TTS audio plays for each phrase on detection
+- ✅ Reset button works to restart the script sequence for a new take
+- ✅ Clean, professional appearance — the UI will be visible in the recording
 
 ## Tips for Success
 
-1. **Test Early**: Verify Gradio video streaming works first
-2. **Keep It Simple**: Focus on core functionality over fancy features
-3. **Think Demo**: Design for easy demonstration and presentation
-4. **Handle Errors**: Show helpful error messages to users
-5. **Coordinate with Person 4**: Ensure smooth integration
-6. **Prepare Backup**: Have screenshots/recordings ready if live demo fails
+1. **Test with mock pipeline first**: Verify the UI advances through all 25 phrases before integrating real components
+2. **Make current phrase very visible**: Large font, high contrast — this is what the audience will read in the recording
+3. **Add a Reset button**: Essential for re-recording takes without restarting the app
+4. **Keep it clean**: The UI is part of the demo video — avoid cluttered layouts
+5. **Coordinate with Person 4**: Ensure the `script_index` and `total` fields from the prediction are displayed

@@ -398,42 +398,13 @@ def create_cv_ml_pipeline():
     return process_frame, detector, classifier
 ```
 
-#### Task 5: Performance Optimization (90-110 min)
-Optimize for real-time performance:
+#### Task 5: Reliability Over Speed (90-110 min)
+Since the demo is pre-recorded (not live), focus on **detection reliability** rather than frame rate optimisation:
 
-```python
-# Add performance optimizations to HandDetector
-class HandDetector:
-    def __init__(self, ...):
-        # ... existing init ...
-        
-        # Performance settings
-        self.skip_frames = 2  # Process every 3rd frame
-        self.current_frame_skip = 0
-        self.last_result = None
-        
-    def detect_landmarks_optimized(self, frame: np.ndarray) -> Optional[Dict]:
-        """Optimized detection with frame skipping."""
-        
-        # Skip frames for performance
-        if self.current_frame_skip < self.skip_frames:
-            self.current_frame_skip += 1
-            # Return last result with updated frame
-            if self.last_result:
-                result = self.last_result.copy()
-                result['annotated_frame'] = frame
-                return result
-            return None
-        
-        # Reset skip counter
-        self.current_frame_skip = 0
-        
-        # Process frame normally
-        result = self.detect_landmarks(frame)
-        self.last_result = result
-        
-        return result
-```
+- Raise `min_detection_confidence` to `0.7` for cleaner landmark data
+- Ensure the annotated frame (with hand tracking overlay) looks good visually — it will be on screen during the recording
+- Test under the actual lighting conditions you'll use for recording
+- No frame-skipping needed — process every frame for best accuracy
 
 ## Integration Points
 
@@ -467,12 +438,12 @@ frame = np.ndarray  # BGR image from webcam, shape (height, width, 3)
 
 ## Success Criteria
 
-- ✅ MediaPipe detects hands reliably
+- ✅ MediaPipe detects hands reliably under recording lighting conditions
 - ✅ Extracts 21 hand landmarks accurately
-- ✅ Processes frames at 10+ FPS
-- ✅ Provides clean data to ML model
-- ✅ Handles edge cases gracefully
-- ✅ Integration works smoothly
+- ✅ Hand tracking overlay looks clean and professional on screen
+- ✅ `hand_present: True` fires consistently when the signer holds a sign
+- ✅ `hand_present: False` fires cleanly between signs (no ghost detections)
+- ✅ Integration works smoothly with Person 1's script-mode classifier
 
 ## Tips for Success
 
