@@ -11,7 +11,7 @@ _MODEL_PATH = os.path.join(
     os.path.dirname(__file__), '..', '..', 'data', 'models', 'gesture_recognizer.task'
 )
 _SCRIPT_PATH = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'asl_words.txt'
+    os.path.dirname(__file__), '..', '..', 'Documentation', 'asl_words.txt'
 )
 
 # Minimum confidence for a gesture to count as "a sign was made"
@@ -54,43 +54,52 @@ class ASLClassifier:
         """
         Call once per frame with the raw BGR frame.
 
+        Detection always runs so landmarks are returned every frame for
+        continuous skeleton drawing. Script advancement is gated separately
+        by cooldown and confidence threshold.
+
         Returns the current script word if a confident gesture is detected
-        and the cooldown has elapsed; otherwise returns sign=None.
+        and the cooldown has elapsed; otherwise sign=None but landmarks
+        are still populated whenever a hand is visible.
         """
-        no_result = {'sign': None, 'confidence': 0.0, 'top_3': [], 'index': self._index}
-
-        if self.finished():
-            return no_result
-
-        # Enforce cooldown
-        if time.time() - self._last_fire_time < COOLDOWN_SECONDS:
-            return no_result
-
-        # Detect any confident gesture in the frame
+        # 1. Always run detection — landmarks needed for drawing every frame
+        detected_landmarks = None
         confidence = 0.0
         top_3 = []
 
         if frame is not None and self._recognizer is not None:
-            confidence, top_3 = self._detect_confidence(frame)
+            confidence, top_3, detected_landmarks = self._detect_confidence(frame)
         elif landmarks is not None:
             # Fallback: any hand present counts
             confidence = 0.75
             top_3 = [('hand', 0.75)]
+            detected_landmarks = landmarks
+
+        # Base result — always carries landmarks so skeleton draws regardless
+        base = {
+            'sign': None,
+            'confidence': confidence,
+            'top_3': top_3,
+            'index': self._index,
+            'landmarks': detected_landmarks,
+        }
+
+        # 2. Gates — only block script advancement, not detection
+        if self.finished():
+            return base
+
+        if time.time() - self._last_fire_time < COOLDOWN_SECONDS:
+            return base
 
         if confidence < CONFIDENCE_THRESHOLD:
-            return no_result
+            return base
 
-        # Fire — emit current word and advance
+        # 3. Fire — emit current word and advance
         word = self._script[self._index]
         self._index += 1
         self._last_fire_time = time.time()
 
-        return {
-            'sign': word,
-            'confidence': confidence,
-            'top_3': top_3,
-            'index': self._index - 1,
-        }
+        return {**base, 'sign': word, 'index': self._index - 1}
 
     def finished(self) -> bool:
         """True when all words in the script have been output."""
@@ -115,9 +124,10 @@ class ASLClassifier:
     # MediaPipe detection
     # ------------------------------------------------------------------
 
-    def _detect_confidence(self, frame: np.ndarray) -> Tuple[float, list]:
+    def _detect_confidence(self, frame: np.ndarray) -> Tuple[float, list, Optional[List]]:
         """
-        Run GestureRecognizer and return (confidence, top_3).
+        Run GestureRecognizer and return (confidence, top_3, landmarks).
+        landmarks is a list of 21 (x, y, z) tuples, or None if no hand found.
         Any non-None gesture above threshold counts — we don't care which.
         """
         try:
@@ -125,21 +135,29 @@ class ASLClassifier:
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             result = self._recognizer.recognize(mp_image)
 
+            # Extract hand landmarks regardless of gesture result
+            landmarks = None
+            if result.hand_landmarks:
+                landmarks = [
+                    (lm.x, lm.y, lm.z)
+                    for lm in result.hand_landmarks[0]
+                ]
+
             if not result.gestures:
-                return 0.0, []
+                return 0.0, [], landmarks
 
             gestures = result.gestures[0]
             top = gestures[0]
 
             if top.category_name == 'None':
-                return 0.0, []
+                return 0.0, [], landmarks
 
             top_3 = [(g.category_name, float(g.score)) for g in gestures[:3]]
-            return float(top.score), top_3
+            return float(top.score), top_3, landmarks
 
         except Exception as e:
             print(f"[ASLClassifier] Detection error: {e}")
-            return 0.0, []
+            return 0.0, [], None
 
     def _load_gesture_recognizer(self):
         model_path = os.path.abspath(_MODEL_PATH)

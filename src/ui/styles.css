@@ -80,6 +80,65 @@ body,
     border: 1px solid rgba(0, 212, 170, 0.2) !important;
     box-shadow: 0 0 20px rgba(0, 212, 170, 0.06) !important;
     overflow: hidden !important;
+    /* Own compositing layer — prevents image updates from reflowing siblings */
+    transform: translateZ(0);
+    contain: layout paint !important;
+}
+
+/* Suppress blank-frame flash when streamed image is swapped */
+#hero-video img {
+    display: block !important;
+    transition: none !important;
+    object-fit: cover !important;
+    /* GPU layer isolation */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Keep container height stable between frames — prevents layout jump */
+#hero-video .image-container {
+    background: #0f0f23 !important;
+    min-height: 360px;
+}
+
+/* Hide download/share toolbar on the live feed to reduce render overhead */
+#hero-video .icon-buttons,
+#hero-video .download-icon,
+#hero-video .share-icon,
+#hero-video .svelte-a6wt81 {
+    display: none !important;
+}
+
+/* ── Suppress Gradio streaming pulse animation ────────────── */
+
+/* The .generating class is added to ALL stream outputs on every frame.
+   It adds an animated amber border + progress bar — this IS the flutter. */
+.generating {
+    animation: none !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
+    transition: none !important;
+}
+
+/* Hide the orange streaming progress bar at the bottom of components */
+.progress-bar-wrap,
+.progress-level,
+.progress-level-inner,
+.eta-bar {
+    display: none !important;
+}
+
+/* Remove the "pending" pulsing state on panels that haven't changed */
+.pending {
+    opacity: 1 !important;
+    animation: none !important;
+}
+
+/* ── Webcam input — no pulse while streaming ──────────────── */
+
+#webcam-input.generating,
+#webcam-input .generating {
+    animation: none !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* ── Webcam input — small, unobtrusive ────────────────────── */

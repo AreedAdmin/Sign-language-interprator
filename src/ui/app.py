@@ -210,6 +210,7 @@ class ASLGradioApp:
     def __init__(self, use_mock=True):
         self._use_mock = use_mock
         self._pipeline = None
+        self._reset_fn = None
 
         self.tts_engine = TTSEngine(rate=150, volume=0.9)
 
@@ -221,6 +222,12 @@ class ASLGradioApp:
         self._last_detected_sign = None
         self._sign_history = []
         self._session_start = time.time()
+
+        # Diff-tracking — only push HTML updates when content actually changes
+        self._last_det_key = None       # (sign, confidence_bucket) tuple
+        self._last_sentence_key = None  # (signs tuple, refined) tuple
+        self._last_history_len = -1     # history length
+        self._last_stats_update = 0.0   # epoch time of last stats push
 
     # ── Public integration API ─────────────────────────────────
 
@@ -236,6 +243,27 @@ class ASLGradioApp:
         """
         self._pipeline = pipeline_func
         self._use_mock = False
+
+    def set_reset_fn(self, fn):
+        """
+        Register a callable that resets the ASL script sequencer.
+        Called from main.py with classifier.reset.
+        """
+        self._reset_fn = fn
+
+    def _reset_script(self):
+        """Reset the classifier script and clear the sentence display."""
+        if self._reset_fn:
+            self._reset_fn()
+        self._accumulated_signs = []
+        self._refined_sentence = ""
+        self._last_detected_sign = None
+        self._last_sign_time = 0.0
+        # Force all panels to repaint on next frame
+        self._last_det_key = object()
+        self._last_sentence_key = object()
+        self._last_history_len = -1
+        return _sentence_html([], "")
 
     # ── Internal processing ────────────────────────────────────
 
@@ -303,26 +331,79 @@ class ASLGradioApp:
         annotated = result.get("frame", frame)
         prediction = result.get("prediction")
 
-        if prediction and prediction.get("sign"):
-            top_3 = prediction.get("top_3", [
-                (prediction["sign"], prediction["confidence"]),
-                ("—", 0), ("—", 0),
-            ])
-            det_html = _detection_html(
-                prediction["sign"], prediction["confidence"], top_3,
-            )
-            self._maybe_accumulate(
-                prediction["sign"], prediction["confidence"],
-            )
-        else:
-            det_html = _waiting_html()
-
-        return (
-            annotated, det_html,
-            _sentence_html(self._accumulated_signs, self._refined_sentence),
-            _history_html(self._sign_history),
-            _stats_html(len(self._sign_history), self._session_start),
+        # ── Detection panel ──────────────────────────────────────────────────
+        # Show gesture info whenever a hand is visible (confidence > 0),
+        # not only when a sign fires. This keeps the panel alive between
+        # script advances so the user sees real-time gesture feedback.
+        has_hand = (
+            prediction
+            and prediction.get("landmarks") is not None
         )
+        confidence = prediction.get("confidence", 0) if prediction else 0
+        top_3 = prediction.get("top_3", []) if prediction else []
+
+        if has_hand and (confidence > 0 or top_3):
+            # If a sign just fired, show the script word; otherwise show
+            # the top gesture name from MediaPipe so the user still sees
+            # live feedback during cooldown.
+            sign_label = prediction.get("sign")
+            if sign_label is None and top_3:
+                sign_label = top_3[0][0]
+                confidence = top_3[0][1]
+            elif sign_label is None:
+                sign_label = "Detecting..."
+
+            if not top_3:
+                top_3 = [(sign_label, confidence), ("—", 0), ("—", 0)]
+
+            conf_bucket = round(confidence * 20) / 20
+            det_key = (sign_label, conf_bucket)
+            if det_key != self._last_det_key:
+                det_html = _detection_html(sign_label, confidence, top_3)
+                self._last_det_key = det_key
+            else:
+                det_html = gr.update()
+        else:
+            det_key = None
+            if det_key != self._last_det_key:
+                det_html = _waiting_html()
+                self._last_det_key = det_key
+            else:
+                det_html = gr.update()
+
+        # Accumulate script words (only when sign actually fires)
+        if prediction and prediction.get("sign"):
+            self._maybe_accumulate(
+                prediction["sign"], prediction.get("confidence", 0),
+            )
+
+        # ── Sentence panel — only re-render when signs list or sentence changes ─
+        sentence_key = (tuple(self._accumulated_signs), self._refined_sentence)
+        if sentence_key != self._last_sentence_key:
+            sentence_html = _sentence_html(
+                self._accumulated_signs, self._refined_sentence,
+            )
+            self._last_sentence_key = sentence_key
+        else:
+            sentence_html = gr.update()
+
+        # ── History panel — only re-render when a new sign is added ─────────
+        history_len = len(self._sign_history)
+        if history_len != self._last_history_len:
+            history_html = _history_html(self._sign_history)
+            self._last_history_len = history_len
+        else:
+            history_html = gr.update()
+
+        # ── Stats bar — update at most once per second ───────────────────────
+        now = time.time()
+        if now - self._last_stats_update >= 1.0:
+            stats_html = _stats_html(len(self._sign_history), self._session_start)
+            self._last_stats_update = now
+        else:
+            stats_html = gr.update()
+
+        return annotated, det_html, sentence_html, history_html, stats_html
 
     def _maybe_accumulate(self, sign, confidence, refine_fn=None):
         now = time.time()
@@ -352,6 +433,8 @@ class ASLGradioApp:
         self._refined_sentence = ""
         self._last_detected_sign = None
         self._last_sign_time = 0.0
+        self._last_sentence_key = object()
+        self._last_history_len = -1
         return _sentence_html([], "")
 
     def _speak_sentence(self):
@@ -405,14 +488,15 @@ class ASLGradioApp:
                         sources=["webcam"],
                         type="numpy",
                         streaming=True,
-                        label="Camera",
+                        label="Camera Input",
                         elem_id="webcam-input",
-                        height=80,
+                        height=360,
                     )
                     output_img = gr.Image(
                         type="numpy",
-                        label="Live Feed",
+                        label="Live Feed (with hand tracking)",
                         elem_id="hero-video",
+                        height=360,
                     )
 
                 # Right — detection + recent history
@@ -452,6 +536,9 @@ class ASLGradioApp:
                 clear_btn = gr.Button(
                     "🗑 Clear", variant="stop", elem_id="clear-btn", scale=1,
                 )
+                reset_btn = gr.Button(
+                    "↺ Reset Script", variant="secondary", elem_id="reset-btn", scale=1,
+                )
 
             # ── Speak feedback (visible) ──
             speak_feedback = gr.HTML(value="", elem_id="speak-feedback")
@@ -473,7 +560,7 @@ class ASLGradioApp:
                 inputs=[webcam],
                 outputs=[output_img, detection_panel, sentence_panel,
                          history_panel, stats_bar],
-                stream_every=0.1,
+                stream_every=0.04,
                 time_limit=300,
             )
 
@@ -485,6 +572,11 @@ class ASLGradioApp:
             speak_btn.click(
                 fn=self._speak_sentence,
                 outputs=[speak_feedback],
+            )
+
+            reset_btn.click(
+                fn=self._reset_script,
+                outputs=[sentence_panel],
             )
 
         return demo
